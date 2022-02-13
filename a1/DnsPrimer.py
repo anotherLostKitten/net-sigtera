@@ -10,7 +10,7 @@ class DnsRequest:
         self.qname = b''.join(len(x).to_bytes(1, 'big') + bytes(x, 'utf-8') for x in label.split('.'))+b'\0'
         self.qtype = b'\x00\x0f' if mx else (b'\x00\x02' if ns else b'\x00\x01')
         self.qclass = b'\x00\x01'
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     def request(self):
         return self.header + self.qname + self.qtype + self.qclass
     def send(self, host, port):
@@ -19,16 +19,15 @@ class DnsRequest:
         msgleft = len(msg)
         while msgleft > 0:
             sent = self.socket.send(msg[-msgleft:])
-            print(sent)
             if sent == 0:
                 raise RuntimeError("socket connection broken")
             msgleft -= sent
     def recv(self):
-        recvd = self.socket.recv(16)
+        recvd = self.socket.recv(2048)
         print(recvd)
         
-            
 
 dns = DnsRequest("www.mcgill.ca", False, False)
-dns.send('132.206.85.18', 53)
+print(dns.request())
+dns.send('8.8.8.8', 53)
 dns.recv()
