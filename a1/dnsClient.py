@@ -3,6 +3,7 @@ import socket
 import sys
 import getopt
 import re
+import time
 
 class DnsRequest:
     def __init__(self, label, qtype):
@@ -36,7 +37,6 @@ class DnsResponse:
             i += di
             self.qds.append((lbl, msg[i:i+2], msg[i+2:i+4]))
             i += 4
-        print(self.qds)
         for j in range(0, self.ancount):
             (vals, di) = self.decode_answer(msg, i)
             self.ans.append(vals)
@@ -48,9 +48,7 @@ class DnsResponse:
             self.ars.append(vals)
             i += di
 
-        print(self.ans)
-        print(self.ars)
-            
+        self.check_flags()
             
     def decode_labels(self, msg, i):
         if msg[i] == 0:
@@ -85,19 +83,57 @@ class DnsResponse:
         (lbl, di) = self.decode_labels(msg, i)
         i += di
         rdlength = int.from_bytes(msg[i+8:i+10], 'big')
-        (rdtype, rdfn) = {
-            b'\0\x01': ("IP", self.decode_ip),
-            b'\0\x02': ("NS", self.decode_ns),
-            b'\0\x05': ("CNAME", self.decode_ns),
-            b'\0\x0f': ("MX", self.decode_mx)
-        }[msg[i:i+2]]
-        return ((self.stringify_labels(lbl), rdtype, msg[i+2:i+4], msg[i+4:i+8], rdlength, rdfn(msg, i+10, i+10+rdlength)), di+10+rdlength)
+        (rdtype, rdfn) = (None, None)
+        try:
+            (rdtype, rdfn) = {
+                b'\0\x01': ("IP", self.decode_ip),
+                b'\0\x02': ("NS", self.decode_ns),
+                b'\0\x05': ("CNAME", self.decode_ns),
+                b'\0\x0f': ("MX", self.decode_mx)
+            }[msg[i:i+2]]
+        except:
+            raise Exception(f"ERROR\tUnrecognized response type {msg[i:i+2].hex()}")
+        if msg[i+2:i+4] != b'\0\x01':
+            raise Exception(f"ERROR\tUnexpected response class {msg[i+2:i+4]}, shoud be 0001")
+        return ((self.stringify_labels(lbl), rdtype, msg[i+2:i+4], int.from_bytes(msg[i+4:i+8], 'big'), rdlength, rdfn(msg, i+10, i+10+rdlength)), di+10+rdlength)
 
     def skip_answer(self, msg, i):
         i += self.decode_labels(msg, i)[1]
         rdlength = int.from_bytes(msg[i+8:i+10], 'big')
         return i+10+rdlength
+    def get_auth(self):
+        return "auth" if self.flags[0] & 4 != 0 else "noauth"
+
+    def check_flags(self):
+        if self.flags[0]&128 == 0:
+            raise Exception("ERROR\tUnexpected response was a query")
+        if self.flags[1]&128 == 0:
+            print("ERROR\tServer does not allow recursive queries")
+        if self.flags[1]&15 == 1:
+            raise Exception("ERROR\tFormat error in sent packet")
+        elif self.flags[1]&15 == 2:
+            raise Exception("ERROR\tServer failure")
+        elif self.flags[1]&15 == 3:
+            raise Exception("NOT FOUND")
+        elif self.flags[1]&15 == 4:
+            raise Exception("ERROR\tQuery type not implemented by server")
+        elif self.flags[1]&15 == 5:
+            raise Exception("ERROR\tServer refused query")
         
+    
+    def print(self):
+        
+        auth = self.get_auth()
+        if self.ans:
+            print(f"***Answer Section ({self.ancount} records)***")
+            for (q, rdtype, rdclass, ttl, rdlen, rddata) in self.ans:
+                print(f"{rdtype}\t{rddata}\t{ttl}\t{auth}")
+        else:
+            print("NOT FOUND")
+        if self.ars:
+            print(f"***Answer Section ({self.arcount} records)***")
+            for (q, rdtype, rdclass, ttl, rdlen, rddata) in self.ars:
+                print(f"{rdtype}\t{rddata}\t{ttl}\t{auth}")
             
 
 def send(s, dns):
@@ -113,18 +149,14 @@ def recv(s, t):
     s.settimeout(t)
     return s.recv(2048)
 
-
-
-
-
-
 def main(host, query, vals):
-        
+    print(f"DNS Client sending request for\n{query} Server: {host}\nRequest type: {vals['type']}")
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.connect((host, vals['p']))
         retries = 0
         reqs = {}
         resp = b''
+        start_time = time.time()
         for i in range(0, vals['r']):
             dns = DnsRequest(query, vals['type'])
             reqs[dns.pid] = dns
@@ -135,14 +167,19 @@ def main(host, query, vals):
             except socket.timeout:
                 retries += 1
         if resp == b'':
-            raise Exception(f"ERROR\t Maximum number of retries {retries} exceeded")
+            raise Exception(f"ERROR\tMaximum number of retries {retries} exceeded")
+        elapsed = time.time() - start_time
+        print(f"Response recieved after {elapsed} seconds ({retries} retries)")
         dns = DnsResponse(resp)
+        if dns.pid not in reqs.keys():
+            raise Exception("ERROR\tUnexpected response ID does not match any sent packets")
+        dns.print()
 
 if __name__ == "__main__":
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 't:r:p:n:m:')
-        assert len(args) == 2
-        assert re.fullmatch('@[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}', args[0])
+        assert len(args) == 2, f"should have 2 arguments, has {len(args)}"
+        assert re.fullmatch('@[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}', args[0]), "specify DNS server with the form @x.x.x.x"
         host = args[0][1:]
         query = args[1]
         vals = {'p': 53,
@@ -151,17 +188,20 @@ if __name__ == "__main__":
                 'type': 'A'}
         for (o, v) in opts:
             if o in ['-p', '-r', '-t']:
+                assert v.isdigit(), f"Argument for {o} must be an integer"
                 vals[o[1]] = int(v)
             elif o == '-m':
-                assert v == 'x'
-                assert vals['type'] == 'A'
+                assert v == 'x', f"option -m{v} not recognized"
+                assert vals['type'] == 'A', f"cannot specify both -ns and -mx"
                 vals['type'] = 'MX'
             elif o == '-n':
-                assert v == 's'
-                assert vals['type'] == 'A'
+                assert v == 's', f"option -n{v} not recognized"
+                assert vals['type'] == 'A', f"cannot specify both -ns and -mx"
                 vals['type'] = 'NS'    
         main(host, query, vals)
+    except getopt.GetoptError as e:
+        print(f"ERROR\tIncorrect input syntax: {e}")
     except AssertionError as e:
-        print("usage: python dnsClient [-t timeout] [-r max-retries] [-p port] [-mx|-ns] @server name")
+        print(f"ERROR\tIncorrect input syntax: {e}")
     except Exception as e:
         print(e)
