@@ -73,7 +73,7 @@ def show_normalized(plt, img, size = None):
     img = abs(img)
     if size != None:
         img = cv2.resize(img, size)
-    plot = plt.imshow(img, norm=LogNorm(img.min(), img.max()), cmap="spring")
+    plot = plt.imshow(img, norm=LogNorm(img.min(), img.max()), cmap="gray")
     fig.colorbar(plot, ax=plt)
 
 def denoise(img, amt):
