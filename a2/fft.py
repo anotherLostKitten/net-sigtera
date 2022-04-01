@@ -20,9 +20,11 @@ def dft_row(x):
     return np.matmul(x, coeffs)
 
 def dft(x):
+    if isinstance(x, list):
+        x = np.array(x)
     if x.shape[0] > 1:
         x = dft_col(x)
-    if x.shape[1] > 1:
+    if len(x.shape)>1 and x.shape[1] > 1:
         x = dft_row(x)
     return x
 
@@ -54,9 +56,11 @@ def ctdft_row(x):
 
     
 def ctdft(x):
+    if isinstance(x, list):
+        x = np.array(x)
     if x.shape[0] > 1:
         x = ctdft_col(x)
-    if x.shape[1] > 1:
+    if len(x.shape)>1 and x.shape[1] > 1:
         x = ctdft_row(x)
     return x
 
@@ -83,15 +87,6 @@ def denoise(img, amt):
     return img
 
 if __name__ == "__main__":
-    #a = np.array([[0, 1, 2, 3, 4, 5, 6, 7],
-    #              [8, 9, 10, 11, 12, 13, 14, 15+1j]])
-    #ctdft_a = ctdft(a)
-    #print(ctdft_a)
-    #print(np.fft.fft2(a))
-    #print(ictdft(ctdft_a))
-    #print(np.fft.ifft2(ctdft_a))
-
-    
     (opts, args) = getopt.getopt(sys.argv[1:], "i:m:")
     imgfile = "moonlanding.png"
     mode = 1
