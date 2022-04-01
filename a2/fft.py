@@ -1,4 +1,3 @@
-
 import cv2
 import cmath
 from math import pi, log, ceil
@@ -8,27 +7,24 @@ import getopt
 import sys
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
-
-cache = {}
-cache_hits = [0, 0]
-def cexp(v, l):
-    key = Fraction(v, l)
-    if not key in cache:
-        cache[key] = cmath.exp(-2*pi*v*1j/l)
-    else:
-        cache_hits[0] += 1
-    cache_hits[1] += 1
-    return cache[key]
+import timeit
 
 def dft_col(x):
     l = x.shape[0]
-    coeffs = np.array([[cexp(n*k, l) for n in range(0, l)] for k in range(0, l)])
+    coeffs = np.array([[cmath.exp(-2*pi*n*k*1j/l) for n in range(0, l)] for k in range(0, l)])
     return np.matmul(coeffs, x)
 
 def dft_row(x):
     l = x.shape[1]
-    coeffs = np.array([[cexp(n*k, l) for n in range(0, l)] for k in range(0, l)])
+    coeffs = np.array([[cmath.exp(-2*pi*n*k*1j/l) for n in range(0, l)] for k in range(0, l)])
     return np.matmul(x, coeffs)
+
+def dft(x):
+    if x.shape[0] > 1:
+        x = dft_col(x)
+    if x.shape[1] > 1:
+        x = dft_row(x)
+    return x
 
 def ctdft_col(x):
     l = x.shape[0]
@@ -36,9 +32,9 @@ def ctdft_col(x):
         return dft_col(x)
     evens = ctdft_col(x[0:l:2])
     odds = ctdft_col(x[1:l:2])
-    result = np.zeros((l, x.shape[1]), dtype = 'complex_')
+    result = np.empty((l, x.shape[1]), dtype = 'complex_')
     for k in range(0, l//2):
-        odd = odds[k] * cexp(k, l)
+        odd = odds[k] * cmath.exp(-2*pi*k*1j/l)
         result[k] = evens[k] + odd
         result[k+l//2] = evens[k] - odd
     return result
@@ -49,9 +45,9 @@ def ctdft_row(x):
         return dft_row(x)
     evens = ctdft_row(x[:,0:l:2])
     odds = ctdft_row(x[:,1:l:2])
-    result = np.zeros((x.shape[0], l), dtype = 'complex_')
+    result = np.empty((x.shape[0], l), dtype = 'complex_')
     for k in range(0, l//2):
-        odd = odds[:,k] * cexp(k, l)
+        odd = odds[:,k] * cmath.exp(-2*pi*k*1j/l)
         result[:,k] = evens[:,k] + odd
         result[:,k+l//2] = evens[:,k] - odd
     return result
@@ -148,5 +144,35 @@ if __name__ == "__main__":
         
         
     elif mode == 4:
-        pass
+        rng = np.random.default_rng()
+        sizes = [2**p for p in range(5, 11)]
+        dft_avg = []
+        dft_dev = []
+        ctdft_avg = []
+        ctdft_dev = []
+        for s in sizes:
+            dft_runs = []
+            ctdft_runs = []
+            print(f"Matrix size {s}x{s}")
+            for t in range(0,10):
+                print(f"\tRun {t+1}")
+                a = rng.random((s, s))
+                start = timeit.default_timer()
+                dft(a)
+                stop = timeit.default_timer()
+                dft_runs.append(stop - start)
+
+                start = timeit.default_timer()
+                ctdft(a)
+                stop = timeit.default_timer()
+                ctdft_runs.append(stop - start)
+            dft_avg.append(sum(dft_runs)/10)
+            dft_dev.append(2*np.std(dft_runs))
+            ctdft_avg.append(sum(ctdft_runs)/10)
+            ctdft_dev.append(2*np.std(ctdft_runs))
+        plt.errorbar(sizes, dft_avg, dft_dev, ecolor='k', label="Naive DFT")
+        plt.errorbar(sizes, ctdft_avg, ctdft_dev, ecolor='k', label="Cooley Tukey DFT")
+        plt.legend()
+        plt.xlabel("matrix dimension (NxN)")
+        plt.ylabel("time (s)")
     plt.show()
