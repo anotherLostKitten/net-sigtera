@@ -127,7 +127,26 @@ if __name__ == "__main__":
         img_denoise = cv2.resize(abs(ictdft(img_dft)), orig_size)
         plt_denoise.imshow(img_denoise, cmap="gray")
     elif mode == 3:
-        pass
+        fig, plts = plt.subplots(2, 3)
+        fig.suptitle("Compression")
+        img_dft = ctdft(img_scaled)
+        threshs = abs(img_dft).flatten()
+        threshs.sort()
+        for i in (0,1):
+            for j in (0,1,2):
+                if i==0 and j==0:
+                    print(f"Original image: {threshs.size} non-zeroes")
+                    plts[i][j].imshow(img, cmap="gray")
+                    continue
+                ti = round(((0, 0.5, 0.75), (0.9, 0.99, 0.999))[i][j]*threshs.size)
+                thresh = threshs[ti]
+                print(f"Magnitude threshhold with {threshs.size - ti} non-zeroes; {100*(threshs.size - ti)/threshs.size}% of fourier coefficients remain")
+                f = np.vectorize(lambda c: c if abs(c)>=thresh else 0)
+                img_dft = f(img_dft)
+                img_comp = cv2.resize(abs(ictdft(img_dft)), orig_size)
+                plts[i][j].imshow(img_comp, cmap="gray")
+        
+        
     elif mode == 4:
         pass
     plt.show()
