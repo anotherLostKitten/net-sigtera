@@ -115,7 +115,7 @@ eg.
 .00.
 would be the result on a 4x4 image with amt = 0.5;
 amt dictates the fraction of image width & height zero'd by the cross pattern
-the percent of remaining non-zeroes will be aprox. amt^2 of coefficients
+the percent of remaining non-zeroes will be the aprox. fraction (1-amt)^2 of coefficients
 """
 def denoise(img, amt):
     c,r = img.shape
