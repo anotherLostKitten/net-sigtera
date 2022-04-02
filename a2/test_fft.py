@@ -14,7 +14,10 @@ if __name__ == "__main__":
     print(np.fft.fft(a))
 
     print("\nTest 1D inverse DFT (there are rounding errors)\n=================================")
+    print("cooley tukey implementaion")
     print(ictdft(ctdft_a))
+    print("numpy implementation")
+    print(np.fft.ifft(ctdft_a))
     
     print("\nTest 2D DFT\n=================================")
     a = np.array([[0, 1, 2, 3, 4, 5, 6, 7],
@@ -29,6 +32,10 @@ if __name__ == "__main__":
     print(np.fft.fft2(a))
 
     print("\nTest 2D inverse DFT (there are rounding errors)\n=================================")
+    print("cooley tukey implementaion")
     print(ictdft(ctdft_a))
+    print("numpy implementation")
+    print(np.fft.ifft2(ctdft_a))
+
     
     
